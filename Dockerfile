@@ -4,6 +4,7 @@ FROM mcr.microsoft.com/azure-functions/python:4-python3.12
 
 # Update and upgrade system packages to fix vulnerabilities
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y libvips && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
