@@ -58,7 +58,7 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
             chunk_size = 8 * 1024 * 1024  # 8 MB
             offset = 0
             while True:
-                chunk = await asyncio.to_thread(download_stream.readinto, bytearray(chunk_size))
+                chunk = await asyncio.to_thread(download_stream.read, chunk_size)
                 if not chunk:
                     break
                 temp_blob.write(chunk)
