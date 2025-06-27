@@ -1,0 +1,114 @@
+import azure.functions as func
+import logging
+import os
+import asyncio
+from azure.storage.blob import BlobServiceClient
+import pyvips
+
+app = func.FunctionApp()
+
+@app.event_grid_trigger(arg_name="event")
+async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
+    logger = logging.getLogger("blob_to_dzi_eventgrid_trigger")
+    logger.info(f"Received Event: id={getattr(event, 'id', None)}, subject={getattr(event, 'subject', None)}")
+    try:
+        event_data = event.get_json()
+        blob_url = event_data.get('url')
+        logger.info(f"Parsed blob URL: {blob_url}")
+    except Exception as e:
+        logger.error(f"Error accessing event.get_json(): {e}")
+        blob_url = None
+    if not blob_url:
+        logger.error('No blob URL found in event data.')
+        return
+
+    # Parse storage account, container, and blob name from URL
+    from urllib.parse import urlparse
+    parsed = urlparse(blob_url)
+    path_parts = parsed.path.lstrip('/').split('/', 1)
+    if len(path_parts) != 2:
+        logger.error(f'Could not parse container and blob name from URL: {blob_url}')
+        return
+    container_name, blob_name = path_parts
+    logger.info(f"Container: {container_name}, Blob: {blob_name}")
+
+    # Get connection string from environment
+    conn_str = os.environ.get('AzureWebJobsStorage')
+    if not conn_str:
+        logger.error('AzureWebJobsStorage not set in environment.')
+        return
+
+    blob_service_client = BlobServiceClient.from_connection_string(conn_str)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+
+    # Download blob to temp file
+    import tempfile
+    # Log container and blob name for debugging
+    logger.info(f"Attempting to download from container: '{container_name}', blob: '{blob_name}'")
+    try:
+        # Check if container exists
+        container_client = blob_service_client.get_container_client(container_name)
+        exists = await asyncio.to_thread(container_client.exists)
+        if not exists:
+            logger.error(f"Container '{container_name}' does not exist in the storage account.")
+            return
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(blob_name)[1]) as temp_blob:
+            logger.info(f"Downloading blob to temp file: {temp_blob.name}")
+            download_stream = await asyncio.to_thread(blob_client.download_blob)
+            await asyncio.to_thread(temp_blob.write, download_stream.readall())
+            temp_blob_path = temp_blob.name
+    except Exception as e:
+        logger.error(f"Failed to download blob: {e}")
+        return
+
+    # Convert to DZI using pyvips
+    try:
+        dzi_output_dir = tempfile.mkdtemp()
+        dzi_basename = os.path.splitext(os.path.basename(blob_name))[0]
+        dzi_output_path = os.path.join(dzi_output_dir, dzi_basename)
+        logger.info(f"Converting to DZI: {dzi_output_path}")
+        image = await asyncio.to_thread(pyvips.Image.new_from_file, temp_blob_path, access='sequential')
+        await asyncio.to_thread(image.dzsave, dzi_output_path)
+    except Exception as e:
+        logger.error(f"DZI conversion failed: {e}")
+        return
+
+    # Upload DZI files and all subdirectory files to 'web-slides-dzi-output' in the same container
+    dzi_output_container_dir = 'web-slides-dzi-output'
+    original_blob_dir = os.path.dirname(blob_name)
+    async def upload_file(local_path, relative_path):
+        if original_blob_dir:
+            dzi_blob_name = os.path.join(dzi_output_container_dir, original_blob_dir, relative_path)
+        else:
+            dzi_blob_name = os.path.join(dzi_output_container_dir, relative_path)
+        try:
+            with open(local_path, 'rb') as data:
+                await asyncio.to_thread(
+                    blob_service_client.get_blob_client(container=container_name, blob=dzi_blob_name).upload_blob,
+                    data,
+                    overwrite=True
+                )
+            logger.info(f"Uploaded: {dzi_blob_name}")
+        except Exception as e:
+            logger.error(f"Failed to upload {dzi_blob_name}: {e}")
+
+    upload_tasks = []
+    for root, dirs, files in os.walk(dzi_output_dir):
+        for file in files:
+            local_file_path = os.path.join(root, file)
+            rel_path = os.path.relpath(local_file_path, dzi_output_dir)
+            upload_tasks.append(upload_file(local_file_path, rel_path))
+    await asyncio.gather(*upload_tasks)
+    logger.info(f'DZI conversion and upload complete for blob: {blob_name}')
+
+    # Clean up temp files and directories
+    import shutil
+    try:
+        if os.path.exists(temp_blob_path):
+            os.remove(temp_blob_path)
+            logger.info(f"Cleaned up temp file: {temp_blob_path}")
+        if os.path.exists(dzi_output_dir):
+            shutil.rmtree(dzi_output_dir)
+            logger.info(f"Cleaned up temp directory: {dzi_output_dir}")
+    except Exception as e:
+        logger.warning(f"Failed to clean up temp files or directories: {e}")

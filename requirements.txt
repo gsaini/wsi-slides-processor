@@ -1,0 +1,7 @@
+# Do not include azure-functions-worker in this file
+# The Python Worker is managed by the Azure Functions platform docker.io/gopalsaini/wsi-slides-dzi-processor:latest   
+# Manually managing azure-functions-worker may cause unexpected issues
+
+azure-functions
+azure-storage-blob
+pyvips
