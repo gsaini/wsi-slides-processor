@@ -3,6 +3,7 @@ import logging
 import os
 import asyncio
 from azure.storage.blob import BlobServiceClient
+from azure.storage.blob.aio import BlobServiceClient as AioBlobServiceClient
 import pyvips
 
 app = func.FunctionApp()
@@ -84,18 +85,17 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
     # Upload DZI files and all subdirectory files to 'web-slides-dzi-output' in the same container
     dzi_output_container_dir = 'web-slides-dzi-output'
     original_blob_dir = os.path.dirname(blob_name)
+    # Use async BlobServiceClient for uploads
+    aio_blob_service_client = AioBlobServiceClient.from_connection_string(conn_str)
     async def upload_file(local_path, relative_path):
         if original_blob_dir:
             dzi_blob_name = os.path.join(dzi_output_container_dir, original_blob_dir, relative_path)
         else:
             dzi_blob_name = os.path.join(dzi_output_container_dir, relative_path)
         try:
-            with open(local_path, 'rb') as data:
-                await asyncio.to_thread(
-                    blob_service_client.get_blob_client(container=container_name, blob=dzi_blob_name).upload_blob,
-                    data,
-                    overwrite=True
-                )
+            async with aio_blob_service_client.get_blob_client(container=container_name, blob=dzi_blob_name) as blob_client:
+                with open(local_path, 'rb') as data:
+                    await blob_client.upload_blob(data, overwrite=True)
             logger.info(f"Uploaded: {dzi_blob_name}")
         except Exception as e:
             logger.error(f"Failed to upload {dzi_blob_name}: {e}")
@@ -107,6 +107,7 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
             rel_path = os.path.relpath(local_file_path, dzi_output_dir)
             upload_tasks.append(upload_file(local_file_path, rel_path))
     await asyncio.gather(*upload_tasks)
+    await aio_blob_service_client.close()
     logger.info(f'DZI conversion and upload complete for blob: {blob_name}')
 
     # Clean up temp files and directories

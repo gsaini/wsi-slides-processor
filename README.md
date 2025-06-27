@@ -107,3 +107,78 @@ See `requirements.txt`:
 ---
 
 *This project is maintained by [gsaini](https://github.com/gsaini).*
+
+## Local Validation Guide
+
+This guide explains how to validate the `blob_to_dzi_eventgrid_trigger` Azure Function locally.
+
+### Prerequisites
+- Azure Functions Core Tools v4+
+- Python 3.12
+- Docker (optional, for container-based validation)
+- [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite?tabs=visual-studio) (optional, for local storage emulation)
+- All Python dependencies installed: `pip install -r requirements.txt`
+
+### 1. Configure Local Settings
+Edit or create `local.settings.json`:
+```json
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true"
+  }
+}
+```
+- Use your real Azure Storage connection string if you want to test against a real account.
+
+### 2. Start the Function Locally
+#### Option A: Python Environment
+```sh
+func start
+```
+- The function will listen for Event Grid events.
+
+#### Option B: Docker
+```sh
+docker build -t wsi-slides-dzi-processor:local .
+docker run -p 8080:80 -e AzureWebJobsStorage='UseDevelopmentStorage=true' wsi-slides-dzi-processor:local
+```
+
+### 3. Simulate an Event Grid Event
+Create a file named `event.json` with the following content:
+```json
+[
+  {
+    "id": "test-id",
+    "eventType": "Microsoft.Storage.BlobCreated",
+    "subject": "/blobServices/default/containers/your-container/blobs/your-image.jpg",
+    "eventTime": "2025-06-27T00:00:00.000Z",
+    "data": {
+      "url": "https://<your-storage-account>.blob.core.windows.net/your-container/your-image.jpg"
+    },
+    "dataVersion": "",
+    "metadataVersion": "1"
+  }
+]
+```
+- Replace `<your-storage-account>`, `your-container`, and `your-image.jpg` with your actual values.
+
+Send the event to your local function:
+```sh
+curl -X POST "http://localhost:7071/runtime/webhooks/EventGrid?functionName=blob_to_dzi_eventgrid_trigger" \
+  -H "Content-Type: application/json" \
+  -d @event.json
+```
+
+### 4. Check Logs and Output
+- Monitor the terminal for logs and errors.
+- Check your storage account or Azurite for the output in the `web-slides-dzi-output` container.
+
+### Troubleshooting
+- Ensure the blob and container exist in your storage account.
+- Check for errors in the logs.
+- Make sure all dependencies are installed and the correct Python version is used.
+
+---
+*For more, see the Azure Functions [local development docs](https://learn.microsoft.com/azure/azure-functions/functions-develop-local).*
