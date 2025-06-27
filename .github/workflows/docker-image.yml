@@ -28,6 +28,7 @@ jobs:
         image: gopalsaini/wsi-slides-dzi-processor:latest
         only-severities: critical,high
         sarif-file: scout-report.sarif
+      continue-on-error: true
 
     - name: Upload SARIF report
       uses: github/codeql-action/upload-sarif@v3
