@@ -15,3 +15,13 @@ COPY requirements.txt /
 RUN pip install -r /requirements.txt
 
 COPY . /home/site/wwwroot
+
+# ---
+# Security Notice (2025-06-27):
+#
+# This image may contain vulnerabilities inherited from the base image or system libraries:
+# - CRITICAL: stdlib (Go) CVE-2025-22871 (fixed in 1.23.8, not yet available in base image)
+# - HIGH: pam CVE-2025-6020 (no fix available upstream)
+#
+# These cannot be mitigated at the Dockerfile level. Monitor upstream for updates and rebuild regularly.
+# ---
