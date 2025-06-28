@@ -77,7 +77,11 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         dzi_output_path = os.path.join(dzi_output_dir, dzi_basename)
         logger.info(f"Converting to DZI: {dzi_output_path}")
         image = await asyncio.to_thread(pyvips.Image.new_from_file, temp_blob_path, access='sequential')
-        await asyncio.to_thread(image.dzsave, dzi_output_path)
+        await asyncio.to_thread(
+            image.dzsave,
+            dzi_output_path,
+            tile_size=512  # Recommended for OpenSeadragon, fewer files, good performance
+        )
     except Exception as e:
         logger.error(f"DZI conversion failed: {e}")
         return
