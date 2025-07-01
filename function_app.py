@@ -94,7 +94,9 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
             logger.error('DZI_UPLOAD_DEST_URL environment variable not set!')
             return
         try:
-            subprocess.run(["azcopy", "login", "--identity"], check=True)
+            login_result = subprocess.run(["azcopy", "login", "--identity"], capture_output=True, text=True, check=True)
+            logger.info(f"AzCopy login stdout: {login_result.stdout}")
+            logger.info(f"AzCopy login stderr: {login_result.stderr}")
         except Exception as e:
             logger.error(f"AzCopy login with managed identity failed: {e}")
             return
@@ -115,7 +117,7 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         else:
             logger.error(f"AzCopy failed with exit code {result.returncode}")
 
-    upload_with_azcopy(dzi_output_path)
+    upload_with_azcopy(dzi_output_dir)
 
     # If you want to skip the Python async upload, comment out the following block:
     # aio_blob_service_client = AioBlobServiceClient.from_connection_string(conn_str)
