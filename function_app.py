@@ -89,17 +89,27 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
 
     # Upload DZI files and all subdirectory files to the destination container using AzCopy with Managed Identity
     def upload_with_azcopy(local_dir):
+        # Log MSI/Managed Identity environment variables for troubleshooting
+        logger.info(f"IDENTITY_ENDPOINT: {os.environ.get('IDENTITY_ENDPOINT')}")
+        logger.info(f"IDENTITY_HEADER: {os.environ.get('IDENTITY_HEADER')}")
+        logger.info(f"IDENTITY_SERVER_THUMBPRINT: {os.environ.get('IDENTITY_SERVER_THUMBPRINT')}")
+        logger.info(f"MSI_ENDPOINT: {os.environ.get('MSI_ENDPOINT')}")
+
         dest_url = os.environ.get('DZI_UPLOAD_DEST_URL')  # No SAS token!
         if not dest_url:
             logger.error('DZI_UPLOAD_DEST_URL environment variable not set!')
             return
         try:
+            version_result = subprocess.run(["azcopy", "--version"], capture_output=True, text=True, check=True)
+            logger.info(f"AzCopy version: {version_result.stdout.strip()}")
+            
             login_result = subprocess.run(["azcopy", "login", "--identity"], capture_output=True, text=True, check=True)
             logger.info(f"AzCopy login stdout: {login_result.stdout}")
             logger.info(f"AzCopy login stderr: {login_result.stderr}")
         except Exception as e:
             logger.error(f"AzCopy login with managed identity failed: {e}")
             return
+
         cmd = [
             "azcopy", "copy",
             local_dir,
