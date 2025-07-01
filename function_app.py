@@ -5,6 +5,7 @@ import asyncio
 from azure.storage.blob import BlobServiceClient
 from azure.storage.blob.aio import BlobServiceClient as AioBlobServiceClient
 import pyvips
+import subprocess
 
 app = func.FunctionApp()
 
@@ -86,33 +87,52 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         logger.error(f"DZI conversion failed: {e}")
         return
 
-    # Upload DZI files and all subdirectory files to 'web-slides-dzi-output' in the same container
-    dzi_output_container_dir = 'web-slides-dzi-output'
-    original_blob_dir = os.path.dirname(blob_name)
-    # Use async BlobServiceClient for uploads
-    aio_blob_service_client = AioBlobServiceClient.from_connection_string(conn_str)
-    async def upload_file(local_path, relative_path):
-        if original_blob_dir:
-            dzi_blob_name = os.path.join(dzi_output_container_dir, original_blob_dir, relative_path)
+    # Upload DZI files and all subdirectory files to 'web-slides-dzi-output' in the same container using AzCopy
+    def upload_with_azcopy(local_dir):
+        sas_url = os.environ.get('DZI_UPLOAD_SAS_URL')
+        if not sas_url:
+            logger.error('DZI_UPLOAD_SAS_URL environment variable not set!')
+            return
+        cmd = [
+            "azcopy", "copy",
+            f"{local_dir}/*",
+            sas_url,
+            "--recursive=true"
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            logger.info("AzCopy upload successful")
         else:
-            dzi_blob_name = os.path.join(dzi_output_container_dir, relative_path)
-        try:
-            async with aio_blob_service_client.get_blob_client(container=container_name, blob=dzi_blob_name) as blob_client:
-                with open(local_path, 'rb') as data:
-                    await blob_client.upload_blob(data, overwrite=True)
-            logger.info(f"Uploaded: {dzi_blob_name}")
-        except Exception as e:
-            logger.error(f"Failed to upload {dzi_blob_name}: {e}")
+            logger.error(f"AzCopy failed: {result.stderr}")
 
-    upload_tasks = []
-    for root, dirs, files in os.walk(dzi_output_dir):
-        for file in files:
-            local_file_path = os.path.join(root, file)
-            rel_path = os.path.relpath(local_file_path, dzi_output_dir)
-            upload_tasks.append(upload_file(local_file_path, rel_path))
-    await asyncio.gather(*upload_tasks)
-    await aio_blob_service_client.close()
-    logger.info(f'DZI conversion and upload complete for blob: {blob_name}')
+    upload_with_azcopy(dzi_output_dir)
+
+    # If you want to skip the Python async upload, comment out the following block:
+    # aio_blob_service_client = AioBlobServiceClient.from_connection_string(conn_str)
+    # semaphore = asyncio.Semaphore(8)
+    # async def upload_file(local_path, relative_path):
+    #     async with semaphore:
+    #         if original_blob_dir:
+    #             dzi_blob_name = os.path.join(dzi_output_container_dir, original_blob_dir, relative_path)
+    #         else:
+    #             dzi_blob_name = os.path.join(dzi_output_container_dir, relative_path)
+    #         try:
+    #             async with aio_blob_service_client.get_blob_client(container=container_name, blob=dzi_blob_name) as blob_client:
+    #                 with open(local_path, 'rb') as data:
+    #                     await blob_client.upload_blob(data, overwrite=True)
+    #             logger.info(f"Uploaded: {dzi_blob_name}")
+    #         except Exception as e:
+    #             logger.error(f"Failed to upload {dzi_blob_name}: {e}")
+
+    # upload_tasks = []
+    # for root, dirs, files in os.walk(dzi_output_dir):
+    #     for file in files:
+    #         local_file_path = os.path.join(root, file)
+    #         rel_path = os.path.relpath(local_file_path, dzi_output_dir)
+    #         upload_tasks.append(upload_file(local_file_path, rel_path))
+    # await asyncio.gather(*upload_tasks)
+    # await aio_blob_service_client.close()
+    # logger.info(f'DZI conversion and upload complete for blob: {blob_name}')
 
     # Clean up temp files and directories
     import shutil

@@ -2,6 +2,13 @@
 # FROM mcr.microsoft.com/azure-functions/python:4-python3.12-appservice
 FROM mcr.microsoft.com/azure-functions/python:4-python3.12
 
+# Install AzCopy and add to PATH
+RUN wget -O azcopy.tar.gz https://aka.ms/downloadazcopy-v10-linux \
+    && tar -xzf azcopy.tar.gz \
+    && cp ./azcopy_linux_amd64_*/azcopy /usr/local/bin/ \
+    && chmod +x /usr/local/bin/azcopy \
+    && rm -rf azcopy.tar.gz azcopy_linux_amd64_*
+
 # Update and upgrade system packages to fix vulnerabilities
 RUN apt-get update && \
     apt-get upgrade -y && \
