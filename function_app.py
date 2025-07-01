@@ -95,7 +95,7 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
             return
         cmd = [
             "azcopy", "copy",
-            f"{local_dir}/*",
+            f"{local_dir}",
             sas_url,
             "--recursive=true"
         ]
@@ -110,7 +110,7 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         else:
             logger.error(f"AzCopy failed with exit code {result.returncode}")
 
-    upload_with_azcopy(dzi_output_dir)
+    upload_with_azcopy(dzi_output_path)
 
     # If you want to skip the Python async upload, comment out the following block:
     # aio_blob_service_client = AioBlobServiceClient.from_connection_string(conn_str)
