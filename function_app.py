@@ -103,7 +103,7 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
             version_result = subprocess.run(["azcopy", "--version"], capture_output=True, text=True, check=True)
             logger.info(f"AzCopy version: {version_result.stdout.strip()}")
             
-            login_result = subprocess.run(["azcopy", "login", "--identity", "--use-keychain=false"], capture_output=True, text=True)
+            login_result = subprocess.run(["azcopy", "login", "--identity"], capture_output=True, text=True)
             logger.info(f"AzCopy login stdout: {login_result.stdout}")
             logger.info(f"AzCopy login stderr: {login_result.stderr}")
             if login_result.returncode != 0:
