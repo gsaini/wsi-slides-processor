@@ -91,9 +91,10 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         dest_url = os.environ.get('DZI_UPLOAD_DEST_URL')
         cmd = [
             "azcopy", "copy",
-            os.path.join(local_dir, "*"),
+             f"{local_dir}/*",
             dest_url,
-            "--recursive=true"
+            "--recursive=true",
+            "--log-level=DEBUG"
         ]
         logger.info(f"AzCopy command: azcopy copy {cmd[2]} {dest_url} --recursive=true (using SAS token)")
         result = subprocess.run(cmd, capture_output=True, text=True)
