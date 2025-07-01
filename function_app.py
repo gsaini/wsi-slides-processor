@@ -97,31 +97,29 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         logger.info(f"AZCOPY_AUTO_LOGIN_TYPE: {os.environ.get('AZCOPY_AUTO_LOGIN_TYPE')}")
         os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = 'MSI'
 
-        dest_url = os.environ.get('DZI_UPLOAD_DEST_URL')  # No SAS token!
-        if not dest_url:
-            logger.error('DZI_UPLOAD_DEST_URL environment variable not set!')
+        # Use SAS token for AzCopy authentication
+        dest_url = os.environ.get('DZI_UPLOAD_DEST_URL')
+        sas_token = os.environ.get('DZI_UPLOAD_SAS_TOKEN')
+        if not dest_url or not sas_token:
+            logger.error('DZI_UPLOAD_DEST_URL or DZI_UPLOAD_SAS_TOKEN environment variable not set!')
             return
+        # Append SAS token to destination URL if not already present
+        if '?' not in dest_url:
+            dest_url = f"{dest_url}?{sas_token}"
+        logger.info(f"AzCopy destination URL (with SAS): {dest_url}")
         try:
             version_result = subprocess.run(["azcopy", "--version"], capture_output=True, text=True, check=True)
             logger.info(f"AzCopy version: {version_result.stdout.strip()}")
-            
-            login_result = subprocess.run(["azcopy", "login", "--identity"], capture_output=True, text=True)
-            logger.info(f"AzCopy login stdout: {login_result.stdout}")
-            logger.info(f"AzCopy login stderr: {login_result.stderr}")
-            if login_result.returncode != 0:
-                logger.error(f"AzCopy login failed with exit code {login_result.returncode}")
-                return
         except Exception as e:
-            logger.error(f"AzCopy login with managed identity failed: {e}")
+            logger.error(f"AzCopy version check failed: {e}")
             return
-
         cmd = [
             "azcopy", "copy",
             local_dir,
             dest_url,
             "--recursive=true"
         ]
-        logger.info(f"AzCopy command: azcopy copy {local_dir} {dest_url} --recursive=true (using managed identity)")
+        logger.info(f"AzCopy command: azcopy copy {local_dir} {dest_url} --recursive=true (using SAS token)")
         result = subprocess.run(cmd, capture_output=True, text=True)
         logger.info(f"AzCopy stdout: {result.stdout}")
         logger.info(f"AzCopy stderr: {result.stderr}")
