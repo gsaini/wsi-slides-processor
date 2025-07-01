@@ -1,4 +1,4 @@
-name: Docker Image CI
+name: Lint & Build Docker Image
 
 on:
   push:
@@ -40,6 +40,15 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build the Docker image
         run: docker build . --file Dockerfile --tag gopalsaini/wsi-slides-dzi-processor:latest
+
+  scan:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Docker image (from build job)
+        run: |
+          docker pull gopalsaini/wsi-slides-dzi-processor:latest || true
       - name: Scan Docker image for vulnerabilities
         uses: docker/scout-action@v1
         with:
@@ -48,9 +57,26 @@ jobs:
           only-severities: critical,high
           sarif-file: scout-report.sarif
         continue-on-error: true
+
+  report:
+    runs-on: ubuntu-latest
+    needs: scan
+    steps:
+      - uses: actions/checkout@v4
       - name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: scout-report.sarif
+
+  push:
+    runs-on: ubuntu-latest
+    needs: scan
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Push the Docker image
         run: docker push gopalsaini/wsi-slides-dzi-processor:latest
