@@ -17,7 +17,7 @@ def upload_with_azcopy(local_dir: str, dest_url: str, logger: logging.Logger) ->
     """
     cmd = [
         "azcopy", "copy",
-        f"{local_dir}",
+        f"{local_dir}/*",
         dest_url,
         "--recursive=true"
     ]
