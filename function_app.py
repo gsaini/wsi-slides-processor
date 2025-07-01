@@ -87,19 +87,24 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         logger.error(f"DZI conversion failed: {e}")
         return
 
-    # Upload DZI files and all subdirectory files to 'web-slides-dzi-output' in the same container using AzCopy
+    # Upload DZI files and all subdirectory files to the destination container using AzCopy with Managed Identity
     def upload_with_azcopy(local_dir):
-        sas_url = os.environ.get('DZI_UPLOAD_SAS_URL')
-        if not sas_url:
-            logger.error('DZI_UPLOAD_SAS_URL environment variable not set!')
+        dest_url = os.environ.get('DZI_UPLOAD_DEST_URL')  # No SAS token!
+        if not dest_url:
+            logger.error('DZI_UPLOAD_DEST_URL environment variable not set!')
+            return
+        try:
+            subprocess.run(["azcopy", "login", "--identity"], check=True)
+        except Exception as e:
+            logger.error(f"AzCopy login with managed identity failed: {e}")
             return
         cmd = [
             "azcopy", "copy",
-            f"{local_dir}",
-            sas_url,
+            local_dir,
+            dest_url,
             "--recursive=true"
         ]
-        logger.info(f"AzCopy command: {' '.join(cmd)}")
+        logger.info(f"AzCopy command: azcopy copy {local_dir} {dest_url} --recursive=true (using managed identity)")
         result = subprocess.run(cmd, capture_output=True, text=True)
         logger.info(f"AzCopy stdout: {result.stdout}")
         logger.info(f"AzCopy stderr: {result.stderr}")
