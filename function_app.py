@@ -89,23 +89,21 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
     # Upload DZI files and all subdirectory files to the destination container using AzCopy
     def upload_with_azcopy(local_dir):
         dest_url = os.environ.get('DZI_UPLOAD_DEST_URL')
-        for item in os.listdir(local_dir):
-            item_path = os.path.join(local_dir, item)
-            cmd = [
-                "azcopy", "copy",
-                os.path.join(item_path, "*") if os.path.isdir(item_path) else item_path,
-                dest_url,
-                "--recursive=true"
-            ]
-            logger.info(f"AzCopy command: azcopy copy {cmd[2]} {dest_url} --recursive=true (using SAS token)")
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            logger.info(f"AzCopy stdout: {result.stdout}")
-            logger.info(f"AzCopy stderr: {result.stderr}")
-            logger.info(f"AzCopy returncode: {result.returncode}")
-            if result.returncode == 0:
-                logger.info(f"AzCopy upload successful for {cmd[2]}")
-            else:
-                logger.error(f"AzCopy failed with exit code {result.returncode} for {cmd[2]}")
+        cmd = [
+            "azcopy", "copy",
+            os.path.join(local_dir, "*"),
+            dest_url,
+            "--recursive=true"
+        ]
+        logger.info(f"AzCopy command: azcopy copy {cmd[2]} {dest_url} --recursive=true (using SAS token)")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        logger.info(f"AzCopy stdout: {result.stdout}")
+        logger.info(f"AzCopy stderr: {result.stderr}")
+        logger.info(f"AzCopy returncode: {result.returncode}")
+        if result.returncode == 0:
+            logger.info(f"AzCopy upload successful for {cmd[2]}")
+        else:
+            logger.error(f"AzCopy failed with exit code {result.returncode} for {cmd[2]}")
 
     upload_with_azcopy(dzi_output_dir)
 
