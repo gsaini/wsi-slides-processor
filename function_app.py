@@ -91,7 +91,7 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         dest_url = os.environ.get('DZI_UPLOAD_DEST_URL')
         cmd = [
             "azcopy", "copy",
-             f"{local_dir}",
+             f"{local_dir}/*",
             dest_url,
             "--recursive=true"
         ]
