@@ -94,6 +94,8 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         logger.info(f"IDENTITY_HEADER: {os.environ.get('IDENTITY_HEADER')}")
         logger.info(f"IDENTITY_SERVER_THUMBPRINT: {os.environ.get('IDENTITY_SERVER_THUMBPRINT')}")
         logger.info(f"MSI_ENDPOINT: {os.environ.get('MSI_ENDPOINT')}")
+        logger.info(f"AZCOPY_AUTO_LOGIN_TYPE: {os.environ.get('AZCOPY_AUTO_LOGIN_TYPE')}")
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = 'MSI'
 
         dest_url = os.environ.get('DZI_UPLOAD_DEST_URL')  # No SAS token!
         if not dest_url:
