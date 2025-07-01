@@ -1,4 +1,4 @@
-# wsi-slides-dzi-processor Azure Function
+# WSI Slide Image to DZI Processor
 
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 ![Azure](https://img.shields.io/badge/azure-%230072C6.svg?style=for-the-badge&logo=microsoftazure&logoColor=white)
@@ -10,9 +10,9 @@
 This Azure Function automatically processes Whole Slide Images (WSI) uploaded to Azure Blob Storage, converting them into Deep Zoom Image (DZI) format using `pyvips`. It is designed to handle very large files (up to several GB) efficiently and is suitable for digital pathology, microscopy, and similar domains.
 
 - **Trigger:** Event Grid (on blob upload)
-- **Input:** Image blob (e.g., `.jpg`, `.tif`) in a monitored container
+- **Input:** Image blob (e.g., `.svs`, `.tiff`) in a monitored container
 - **Output:** DZI tiles and metadata uploaded to a designated output container
-- **Tech Stack:** Python, Azure Functions, Azure Blob Storage, pyvips
+- **Tech Stack:** Python, Azure Functions, Azure Blob Storage, AzCopy, pyvips
 
 > **Note:**
 > This function is built and deployed using Docker because the `libvips` library (required by `pyvips`) is not supported on standard Azure Functions hosting options such as Flex Consumption, Consumption, or App Service plans. Docker allows you to include all necessary native dependencies for reliable execution on the Premium plan or in a custom container environment.
@@ -28,6 +28,12 @@ This Azure Function automatically processes Whole Slide Images (WSI) uploaded to
 ```
 ├── Dockerfile
 ├── function_app.py
+├── parse_event_blob_url.py
+├── parse_container_and_blob.py
+├── download_blob_to_temp.py
+├── convert_to_dzi.py
+├── upload_with_azcopy.py
+├── cleanup_temp_files.py
 ├── host.json
 ├── local.settings.json
 ├── requirements.txt
@@ -155,7 +161,13 @@ Create a file named `event.json` with the following content:
     "subject": "/blobServices/default/containers/your-container/blobs/your-image.jpg",
     "eventTime": "2025-06-27T00:00:00.000Z",
     "data": {
-      "url": "https://<your-storage-account>.blob.core.windows.net/your-container/your-image.jpg"
+      "url": "https://<your-storage-account>.blob.core.windows.net/your-container/your-image.jpg",
+      "api": "PutBlob",
+      "contentType": "image/jpeg",
+      "contentLength": 12345678,
+      "blobType": "BlockBlob",
+      "blobTier": "Hot",
+      "metadata": {}
     },
     "dataVersion": "",
     "metadataVersion": "1"
@@ -181,4 +193,37 @@ curl -X POST "http://localhost:7071/runtime/webhooks/EventGrid?functionName=blob
 - Make sure all dependencies are installed and the correct Python version is used.
 
 ---
-*For more, see the Azure Functions [local development docs](https://learn.microsoft.com/azure/azure-functions/functions-develop-local).*
+
+## AzCopy Authentication: Managed Identity and SAS Token
+
+This function uploads DZI output directories to Azure Blob Storage using AzCopy. Two authentication methods are supported:
+
+### 1. Managed Identity (Recommended for Production)
+- **How it works:**
+  - The Azure Function runs with a User-Assigned or System-Assigned Managed Identity.
+  - AzCopy uses the identity to obtain an OAuth token and authenticate to Azure Blob Storage.
+- **Requirements:**
+  - The Function App's Managed Identity must have at least `Storage Blob Data Contributor` role on the target storage account or container.
+  - No secrets or connection strings are required in code or environment variables.
+- **How to use:**
+  - Ensure the Function App is assigned a Managed Identity in Azure.
+  - Grant the identity access to the storage account/container.
+  - **Important:** Set the environment variable `AZCOPY_AUTO_LOGIN_TYPE` to `MSI`.
+  - AzCopy will automatically use the identity for authentication when running inside Azure.
+
+### 2. SAS Token (For Local Development or Special Cases)
+- **How it works:**
+  - AzCopy authenticates using a Shared Access Signature (SAS) token appended to the destination Blob Storage URL.
+- **Requirements:**
+  - A valid SAS token with write permissions for the target container or directory.
+- **How to use:**
+  - Generate a SAS token for the storage account or container.
+  - Append the SAS token to the destination URL in the AzCopy command (e.g., `https://<account>.blob.core.windows.net/<container>?<sas-token>`).
+  - This method is useful for local testing or scenarios where Managed Identity is not available.
+
+> **Best Practice:**
+> Use Managed Identity for all production deployments to avoid secret management and improve security. SAS tokens should only be used for local development or temporary access.
+
+Please feel free to reach out to me if you have any questions or need further assistance with the WSI Slide Image to DZI Processor project. Your feedback and contributions are always welcome!
+
+---
