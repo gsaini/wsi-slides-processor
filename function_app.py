@@ -3,7 +3,6 @@ import logging
 import os
 import asyncio
 from azure.storage.blob import BlobServiceClient
-from azure.storage.blob.aio import BlobServiceClient as AioBlobServiceClient
 import pyvips
 import subprocess
 
@@ -87,77 +86,28 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         logger.error(f"DZI conversion failed: {e}")
         return
 
-    # Upload DZI files and all subdirectory files to the destination container using AzCopy with Managed Identity
+    # Upload DZI files and all subdirectory files to the destination container using AzCopy
     def upload_with_azcopy(local_dir):
-        # Log MSI/Managed Identity environment variables for troubleshooting
-        logger.info(f"IDENTITY_ENDPOINT: {os.environ.get('IDENTITY_ENDPOINT')}")
-        logger.info(f"IDENTITY_HEADER: {os.environ.get('IDENTITY_HEADER')}")
-        logger.info(f"IDENTITY_SERVER_THUMBPRINT: {os.environ.get('IDENTITY_SERVER_THUMBPRINT')}")
-        logger.info(f"MSI_ENDPOINT: {os.environ.get('MSI_ENDPOINT')}")
-        logger.info(f"AZCOPY_AUTO_LOGIN_TYPE: {os.environ.get('AZCOPY_AUTO_LOGIN_TYPE')}")
-        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = 'MSI'
-
-        # Use SAS token for AzCopy authentication
         dest_url = os.environ.get('DZI_UPLOAD_DEST_URL')
-        sas_token = os.environ.get('DZI_UPLOAD_SAS_TOKEN')
-        if not dest_url or not sas_token:
-            logger.error('DZI_UPLOAD_DEST_URL or DZI_UPLOAD_SAS_TOKEN environment variable not set!')
-            return
-        # Append SAS token to destination URL if not already present
-        if '?' not in dest_url:
-            dest_url = f"{dest_url}?{sas_token}"
-        logger.info(f"AzCopy destination URL (with SAS): {dest_url}")
-        try:
-            version_result = subprocess.run(["azcopy", "--version"], capture_output=True, text=True, check=True)
-            logger.info(f"AzCopy version: {version_result.stdout.strip()}")
-        except Exception as e:
-            logger.error(f"AzCopy version check failed: {e}")
-            return
-        cmd = [
-            "azcopy", "copy",
-            local_dir,
-            dest_url,
-            "--recursive=true"
-        ]
-        logger.info(f"AzCopy command: azcopy copy {local_dir} {dest_url} --recursive=true (using SAS token)")
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        logger.info(f"AzCopy stdout: {result.stdout}")
-        logger.info(f"AzCopy stderr: {result.stderr}")
-        logger.info(f"AzCopy returncode: {result.returncode}")
-        logger.info(f"AzCopy result object: {result}")
-        if result.returncode == 0:
-            logger.info("AzCopy upload successful")
-        else:
-            logger.error(f"AzCopy failed with exit code {result.returncode}")
+        for item in os.listdir(local_dir):
+            item_path = os.path.join(local_dir, item)
+            cmd = [
+                "azcopy", "copy",
+                os.path.join(item_path, "*") if os.path.isdir(item_path) else item_path,
+                dest_url,
+                "--recursive=true"
+            ]
+            logger.info(f"AzCopy command: azcopy copy {cmd[2]} {dest_url} --recursive=true (using SAS token)")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            logger.info(f"AzCopy stdout: {result.stdout}")
+            logger.info(f"AzCopy stderr: {result.stderr}")
+            logger.info(f"AzCopy returncode: {result.returncode}")
+            if result.returncode == 0:
+                logger.info(f"AzCopy upload successful for {cmd[2]}")
+            else:
+                logger.error(f"AzCopy failed with exit code {result.returncode} for {cmd[2]}")
 
     upload_with_azcopy(dzi_output_dir)
-
-    # If you want to skip the Python async upload, comment out the following block:
-    # aio_blob_service_client = AioBlobServiceClient.from_connection_string(conn_str)
-    # semaphore = asyncio.Semaphore(8)
-    # async def upload_file(local_path, relative_path):
-    #     async with semaphore:
-    #         if original_blob_dir:
-    #             dzi_blob_name = os.path.join(dzi_output_container_dir, original_blob_dir, relative_path)
-    #         else:
-    #             dzi_blob_name = os.path.join(dzi_output_container_dir, relative_path)
-    #         try:
-    #             async with aio_blob_service_client.get_blob_client(container=container_name, blob=dzi_blob_name) as blob_client:
-    #                 with open(local_path, 'rb') as data:
-    #                     await blob_client.upload_blob(data, overwrite=True)
-    #             logger.info(f"Uploaded: {dzi_blob_name}")
-    #         except Exception as e:
-    #             logger.error(f"Failed to upload {dzi_blob_name}: {e}")
-
-    # upload_tasks = []
-    # for root, dirs, files in os.walk(dzi_output_dir):
-    #     for file in files:
-    #         local_file_path = os.path.join(root, file)
-    #         rel_path = os.path.relpath(local_file_path, dzi_output_dir)
-    #         upload_tasks.append(upload_file(local_file_path, rel_path))
-    # await asyncio.gather(*upload_tasks)
-    # await aio_blob_service_client.close()
-    # logger.info(f'DZI conversion and upload complete for blob: {blob_name}')
 
     # Clean up temp files and directories
     import shutil
