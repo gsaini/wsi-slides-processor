@@ -99,11 +99,16 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
             sas_url,
             "--recursive=true"
         ]
+        logger.info(f"AzCopy command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
+        logger.info(f"AzCopy stdout: {result.stdout}")
+        logger.info(f"AzCopy stderr: {result.stderr}")
+        logger.info(f"AzCopy returncode: {result.returncode}")
+        logger.info(f"AzCopy result object: {result}")
         if result.returncode == 0:
             logger.info("AzCopy upload successful")
         else:
-            logger.error(f"AzCopy failed: {result.stderr}")
+            logger.error(f"AzCopy failed with exit code {result.returncode}")
 
     upload_with_azcopy(dzi_output_dir)
 
