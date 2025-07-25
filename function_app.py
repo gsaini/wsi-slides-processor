@@ -53,14 +53,24 @@ async def blob_to_dzi_eventgrid_trigger(event: func.EventGridEvent):
         return
 
     blob_service_client = BlobServiceClient.from_connection_string(conn_str)
-    temp_blob_path = await asyncio.to_thread(
-        download_blob_to_temp, blob_service_client, container_name, blob_name
-    )
-    if not temp_blob_path:
+    try:
+        temp_blob_path = await asyncio.to_thread(
+            download_blob_to_temp, blob_service_client, container_name, blob_name
+        )
+        if not temp_blob_path:
+            logger.error("Failed to download blob to temp file: %s/%s", container_name, blob_name)
+            return
+    except Exception as exc:
+        logger.error("Exception during blob download: %s", exc, exc_info=True)
         return
 
-    dzi_output_dir = await asyncio.to_thread(convert_to_dzi, temp_blob_path, blob_name)
-    if not dzi_output_dir:
+    try:
+        dzi_output_dir = await asyncio.to_thread(convert_to_dzi, temp_blob_path, blob_name)
+        if not dzi_output_dir:
+            logger.error("DZI conversion failed for blob: %s", blob_name)
+            return
+    except Exception as exc:
+        logger.error("Exception during DZI conversion: %s", exc, exc_info=True)
         return
 
     dest_url = os.environ.get("DZI_UPLOAD_DEST_URL")

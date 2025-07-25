@@ -77,7 +77,11 @@ This Azure Function automatically processes Whole Slide Images (WSI) uploaded to
 ### Docker Build & Deploy
 1. Build the Docker image:
    ```sh
-   docker build -t <your-image-name> .
+   # For Apple Silicon (ARM64) or multi-arch systems, add --platform to avoid base image warnings:
+   docker build --platform=linux/amd64 -t <your-image-name> .
+   # Or, for ARM64 base images:
+   docker build --platform=linux/arm64 -t <your-image-name> .
+   # If you are unsure, use the platform that matches your deployment target (Azure Functions Premium is amd64/x86_64).
    ```
 2. Run locally:
    ```sh
